@@ -1,0 +1,7 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/anti-duplicate-tool/.vs
+/anti-duplicate-tool/bin/Debug/net6.0
+/anti-duplicate-tool/obj
