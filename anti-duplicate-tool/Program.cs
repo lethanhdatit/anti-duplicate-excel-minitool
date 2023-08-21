@@ -7,8 +7,10 @@ bool excelProcess = true;
 bool jsonProcess = true;
 bool autoSizeRow = true;
 bool autoSizeColumn = true;
-string path = "C:\\Users\\Admin\\Desktop\\duplicate\\";
+
 string version = "v2";
+int levelPrefix = 1;
+string path = "C:\\Users\\Admin\\Desktop\\duplicate\\";
 
 string i_excelPath = $"{path}en_flat.xlsx";
 string o_excelPath = $"{path}en_flat_unique_{version}.xlsx";
@@ -20,7 +22,6 @@ string dup_jsonPath = $"{path}en_flat_dup_{version}.json";
 string common_fe_prefix = "common";
 string common_be_prefix = "common.backend";
 string beKeyword = "backendService";
-int levelPrefix = 4;
 
 if (!excelProcess && !jsonProcess)
     return;
@@ -89,9 +90,7 @@ if(wb_original != null)
         if (duplicatedFeKeys.Any())
         {
             newFeKey = BuildNewKey(common_fe_prefix, duplicatedFeKeys, levelPrefix);
-
-            if (jsonProcess)
-                duplicatedFeKeyGroups.Add(new Item { NewKey = newFeKey, DuplicatedKeys = duplicatedFeKeys, Value = item.Key });
+            duplicatedFeKeyGroups.Add(new Item { NewKey = newFeKey, DuplicatedKeys = duplicatedFeKeys, Value = item.Key });
         }
 
         string newBeKey = string.Empty;
@@ -100,24 +99,44 @@ if(wb_original != null)
             newBeKey = BuildNewKey(common_be_prefix, duplicatedBeKeys, levelPrefix);
             duplicatedBeKeyGroups.Add(new Item { NewKey = newBeKey, DuplicatedKeys = duplicatedBeKeys, Value = item.Key });
         }
+    }
 
-        if (excelProcess)
+    var dupkeyFe = duplicatedFeKeyGroups.GroupBy(g => g.NewKey).Where(a => a.Count() > 1).ToList();
+
+    foreach (var group in dupkeyFe)
+        duplicatedFeKeyGroups.RemoveAll(s => s.NewKey == group.Key);
+
+    if (excelProcess)
+    {
+        foreach (var fe in duplicatedFeKeyGroups)
         {
-            rWs[$"B{i}"].Value = newFeKey;
-            rWs[$"C{i}"].Value = string.Join(Environment.NewLine, duplicatedFeKeys);
-            rWs[$"D{i}"].Value = item.Key;
+            rWs[$"B{i}"].Value = fe.NewKey;
+            rWs[$"C{i}"].Value = string.Join(Environment.NewLine, fe.DuplicatedKeys);
+            rWs[$"D{i}"].Value = fe.Value;
 
             rWs[$"C{i}"].Style.WrapText = true;
 
             if (autoSizeRow)
                 rWs.AutoSizeRow(i - 1);
+
+            i++;
         }
 
-        i++;
-    }
+        foreach (var group in dupkeyFe)
+            foreach (var item in group)
+                foreach (var d in item.DuplicatedKeys)
+                {
+                    rWs[$"B{i}"].Value = d;
+                    rWs[$"D{i}"].Value = item.Value.ToString();
 
-    if (excelProcess)
-    {
+                    rWs[$"C{i}"].Style.WrapText = true;
+
+                    if (autoSizeRow)
+                        rWs.AutoSizeRow(i - 1);
+
+                    i++;
+                }
+
         foreach (var be in duplicatedBeKeyGroups)
         {
             rWs[$"B{i}"].Value = be.NewKey;
@@ -153,15 +172,24 @@ if(wb_original != null)
     {
         if (duplicatedFeKeyGroups.Any() || duplicatedBeKeyGroups.Any())
         {
-            //var jObj = JsonConvert.DeserializeObject<JObject>(File.ReadAllText(i_jsonPath));
+            var jObj = JsonConvert.DeserializeObject<JObject>(File.ReadAllText(i_jsonPath));
             long count = 0;
             JObject combines = new JObject();
 
-            var dupkey = duplicatedFeKeyGroups.GroupBy(g => g.NewKey).Where(a => a.Count() > 1);
-            var c = dupkey.Count();
-
             foreach (var gr in duplicatedFeKeyGroups)
                 combines.Add(gr.NewKey, gr.Value.ToString());
+
+            foreach (var group in dupkeyFe)
+                foreach (var item in group)
+                    foreach (var d in item.DuplicatedKeys)
+                    {
+                        if (jObj.ContainsKey(d) && !combines.ContainsKey(d))
+                        {
+                            combines.Add(d, item.Value.ToString());
+                        }
+                    }
+                        
+
             foreach (var gr in duplicatedBeKeyGroups)
                 combines.Add(gr.NewKey, gr.Value.ToString());
 
