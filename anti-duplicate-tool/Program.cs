@@ -8,7 +8,7 @@ bool jsonProcess = true;
 bool autoSizeRow = true;
 bool autoSizeColumn = true;
 
-string version = "v2";
+string version = "v3";
 int levelPrefix = 1;
 string path = "C:\\Users\\Admin\\Desktop\\duplicate\\";
 
@@ -89,14 +89,14 @@ if(wb_original != null)
         string newFeKey = string.Empty;
         if (duplicatedFeKeys.Any())
         {
-            newFeKey = BuildNewKey(common_fe_prefix, duplicatedFeKeys, levelPrefix);
+            newFeKey = duplicatedFeKeys.Count > 1 ? BuildNewKey(common_fe_prefix, duplicatedFeKeys, levelPrefix) : duplicatedFeKeys.FirstOrDefault();
             duplicatedFeKeyGroups.Add(new Item { NewKey = newFeKey, DuplicatedKeys = duplicatedFeKeys, Value = item.Key });
         }
 
         string newBeKey = string.Empty;
         if (duplicatedBeKeys.Any())
         {
-            newBeKey = BuildNewKey(common_be_prefix, duplicatedBeKeys, levelPrefix);
+            newBeKey = duplicatedBeKeys.Count > 1 ? BuildNewKey(common_be_prefix, duplicatedBeKeys, levelPrefix) : duplicatedBeKeys.FirstOrDefault();
             duplicatedBeKeyGroups.Add(new Item { NewKey = newBeKey, DuplicatedKeys = duplicatedBeKeys, Value = item.Key });
         }
     }
