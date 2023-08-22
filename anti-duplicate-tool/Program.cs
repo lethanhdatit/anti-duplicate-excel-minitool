@@ -10,8 +10,8 @@ bool autoSizeRow = true;
 bool autoSizeColumn = true;
 int levelPrefix = 1;
 
-string version = "v4";
-string compareWithVersion = "v3";
+string version = "v3";
+string compareWithVersion = "";
 
 string path = "C:\\Users\\Admin\\Desktop\\duplicate\\";
 string prefixFileName = "en_flat";
@@ -99,6 +99,8 @@ if(wb_original != null)
 
     if (excelProcess)
     {
+        rWs.AutoSizeRow(0);
+
         if (processCompare)
         {
             if (!File.Exists(c_excelPath))
@@ -126,47 +128,45 @@ if(wb_original != null)
 
                 Common.ProcessCompare(rWs, duplicatedBeKeyGroups, compareResults, compareBeKeyGroups);
             }
-        }
 
-        rWs.AutoSizeRow(0);
-
-        compareResults = compareResults.OrderBy(o => (o.Key.Contains(".") ? o.Key.Split(".")[o.Key.Split(".").Length - 1] : o.Key))
+            compareResults = compareResults.OrderBy(o => (o.Key.Contains(".") ? o.Key.Split(".")[o.Key.Split(".").Length - 1] : o.Key))
                                        .ThenBy(t => t.Value)
                                        .ThenBy(t => t.CompareStatus)
                                        .ThenBy(t => t.CompareNote)
                                        .ToList();
 
-        foreach (var cp in compareResults)
-        {
-            rWs[$"B{i}"].Value = cp.CompareNote;
-            rWs[$"A{i}"].Value = cp.CompareStatus.ToString();
-            rWs[$"C{i}"].Value = cp.Key;
-            rWs[$"D{i}"].Value = string.Join(Environment.NewLine, cp.DuplicatedKeys);
-            rWs[$"E{i}"].Value = cp.Value;
-
-            rWs[$"B{i}"].Style.WrapText = true;
-            rWs[$"D{i}"].Style.WrapText = true;
-
-            if(cp.CompareStatus == ItemStatus.ADDED_NEW)
+            foreach (var cp in compareResults)
             {
-                rWs[$"A{i}"].Style.Font.Color = "#05F50D";
-                rWs[$"C{i}:E{i}"].Style.Font.Color = "#05F50D";
-            }
-            else if(cp.CompareStatus == ItemStatus.REMOVED)
-            {
-                rWs[$"A{i}"].Style.Font.Color = "#F50505";
-                rWs[$"C{i}:E{i}"].Style.Font.Color = "#F50505";
-            }
-            else if (cp.CompareStatus == ItemStatus.CHANGED)
-            {
-                rWs[$"A{i}"].Style.Font.Color = "#F57D05";
-                rWs[$"D{i}"].Style.Font.Color = "#F57D05";
-            }
+                rWs[$"B{i}"].Value = cp.CompareNote;
+                rWs[$"A{i}"].Value = cp.CompareStatus.ToString();
+                rWs[$"C{i}"].Value = cp.Key;
+                rWs[$"D{i}"].Value = string.Join(Environment.NewLine, cp.DuplicatedKeys);
+                rWs[$"E{i}"].Value = cp.Value;
 
-            if (autoSizeRow)
-                rWs.AutoSizeRow(i - 1);
+                rWs[$"B{i}"].Style.WrapText = true;
+                rWs[$"D{i}"].Style.WrapText = true;
 
-            i++;
+                if (cp.CompareStatus == ItemStatus.ADDED_NEW)
+                {
+                    rWs[$"A{i}"].Style.Font.Color = "#05F50D";
+                    rWs[$"C{i}:E{i}"].Style.Font.Color = "#05F50D";
+                }
+                else if (cp.CompareStatus == ItemStatus.REMOVED)
+                {
+                    rWs[$"A{i}"].Style.Font.Color = "#F50505";
+                    rWs[$"C{i}:E{i}"].Style.Font.Color = "#F50505";
+                }
+                else if (cp.CompareStatus == ItemStatus.CHANGED)
+                {
+                    rWs[$"A{i}"].Style.Font.Color = "#F57D05";
+                    rWs[$"D{i}"].Style.Font.Color = "#F57D05";
+                }
+
+                if (autoSizeRow)
+                    rWs.AutoSizeRow(i - 1);
+
+                i++;
+            }
         }
 
         foreach (var fe in duplicatedFeKeyGroups)
