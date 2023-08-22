@@ -2,6 +2,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Data;
+using System.Diagnostics;
 
 bool excelProcess = true;
 bool jsonProcess = true;
@@ -33,6 +34,10 @@ string beKeyword = "backendService";
 if (!excelProcess && !jsonProcess)
     return;
 
+Console.WriteLine("Started");
+Stopwatch stopwatch = new Stopwatch();
+stopwatch.Start();
+
 bool processCompare = !string.IsNullOrWhiteSpace(compareWithVersion);
 
 var wb_original = WorkBook.Load(i_excelPath);
@@ -52,9 +57,14 @@ if(wb_original != null)
     string checkDupTargetColumn = wsTemp.Columns[colValueIndex].Rows[0].Value.ToString();
 
     // keep current char case
-    var uniqueListValues = wsTemp.Columns[colValueIndex]
-                             .Where(s => s.RowIndex != 0) // not count header row
-                             .GroupBy(g => g.Value.ToString());
+    var originalTargetCol = wsTemp.Columns[colValueIndex]
+                                  .Where(s => s.RowIndex != 0); // not count header row
+
+    Console.WriteLine("total rows: " + originalTargetCol.Count());
+
+    var uniqueListValues = originalTargetCol.GroupBy(g => g.Value.ToString());
+
+    Console.WriteLine("total groups: " + uniqueListValues.Count());
 
     WorkBook? rWb = excelProcess ? WorkBook.Create(ExcelFileFormat.XLSX) : null;
     WorkSheet? rWs = null;
@@ -63,10 +73,10 @@ if(wb_original != null)
         rWb.DefaultWorkSheet.Name = wsTemp.Name;
         rWs = rWb.DefaultWorkSheet;
 
-        rWs["A1"].Value = "compare_status" + (processCompare ? $"_with_{compareWithVersion}" : string.Empty);
+        rWs["A1"].Value = "compare_status" + (processCompare ? $" (with {compareWithVersion})" : string.Empty);
         rWs["A1"].Style.Font.Bold = true;
 
-        rWs["B1"].Value = "compare_note" + (processCompare ? $"_with_{compareWithVersion}" : string.Empty);
+        rWs["B1"].Value = "compare_logs";
         rWs["B1"].Style.Font.Bold = true;
 
         rWs["C1"].Value = "new/existed_key";
@@ -110,11 +120,21 @@ if(wb_original != null)
 
                 Common.ProcessCompare(rWs, duplicatedFeKeyGroups, compareResults, compareFeKeyGroups);
 
+                Common.ProcessCompare(rWs, dupkeyFe, compareResults, compareDupkeyFe);
+
+                Common.ProcessCompare(rWs, dupkeyBe, compareResults, compareDupkeyBe);
+
                 Common.ProcessCompare(rWs, duplicatedBeKeyGroups, compareResults, compareBeKeyGroups);
             }
         }
 
         rWs.AutoSizeRow(0);
+
+        compareResults = compareResults.OrderBy(o => (o.Key.Contains(".") ? o.Key.Split(".")[o.Key.Split(".").Length - 1] : o.Key))
+                                       .ThenBy(t => t.Value)
+                                       .ThenBy(t => t.CompareStatus)
+                                       .ThenBy(t => t.CompareNote)
+                                       .ToList();
 
         foreach (var cp in compareResults)
         {
@@ -268,4 +288,7 @@ if(wb_original != null)
             File.WriteAllText(dup_jsonPath, JsonConvert.SerializeObject(new { total = dups.Count(), backend = beDups.Count(), frontend = feDups.Count(), result = dups }, Formatting.Indented));
         }
     }
+    stopwatch.Stop();
+    var tracking = stopwatch.Elapsed;
+    Console.WriteLine("Finished in " + tracking.ToString());
 }

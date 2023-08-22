@@ -108,13 +108,13 @@ public static class Common
 
             if (exitedValue == null)
             {
-                currentRow.CompareNote += $"- New VALUE detected (column '{rWs["E1"].Value}')" + Environment.NewLine;
+                currentRow.CompareNote += $"New VALUE detected at column '{rWs["E1"].Value}'" + Environment.NewLine;
                 currentRow.CompareStatus = ItemStatus.ADDED_NEW;
             }
 
             if (exitedKey == null)
             {
-                currentRow.CompareNote += $"- New KEY detected (column '{rWs["C1"].Value}')" + Environment.NewLine;
+                currentRow.CompareNote += $"New KEY detected at column '{rWs["C1"].Value}'" + Environment.NewLine;
                 currentRow.CompareStatus = ItemStatus.ADDED_NEW;
             }
 
@@ -125,7 +125,7 @@ public static class Common
                     var newDup = exitedKey.DuplicatedKeys.FirstOrDefault(f => f == cr);
                     if (newDup == null)
                     {
-                        currentRow.CompareNote += $"'{cr}' added" + Environment.NewLine;
+                        currentRow.CompareNote += $"'{cr}' added into column '{rWs["D1"].Value}'" + Environment.NewLine;
                         currentRow.CompareStatus = ItemStatus.CHANGED;
                     }
                 }
@@ -134,7 +134,7 @@ public static class Common
                     var oldDup = currentRow.DuplicatedKeys.FirstOrDefault(f => f == old);
                     if (oldDup == null)
                     {
-                        currentRow.CompareNote += $"'{old}' removed" + Environment.NewLine;
+                        currentRow.CompareNote += $"'{old}' removed from column '{rWs["D1"].Value}'" + Environment.NewLine;
                         currentRow.CompareStatus = ItemStatus.CHANGED;
                     }
                 }
@@ -155,13 +155,13 @@ public static class Common
 
             if (exitedValue == null)
             {
-                temp.CompareNote += $"- VALUE not found in current version (column '{rWs["E1"].Value}')" + Environment.NewLine;
+                temp.CompareNote += $"VALUE not found in current version (column '{rWs["E1"].Value}')" + Environment.NewLine;
                 temp.CompareStatus = ItemStatus.REMOVED;
             }
 
             if (exitedKey == null)
             {
-                temp.CompareNote += $"- KEY not found in current version (column '{rWs["C1"].Value}')" + Environment.NewLine;
+                temp.CompareNote += $"KEY not found in current version (column '{rWs["C1"].Value}')" + Environment.NewLine;
                 temp.CompareStatus = ItemStatus.REMOVED;
             }
 
@@ -171,5 +171,64 @@ public static class Common
 
         compareResults.AddRange(currentKeyGroups.Where(w => w.CompareStatus != ItemStatus.NO_CHANGED));
         currentKeyGroups.RemoveAll(w => w.CompareStatus != ItemStatus.NO_CHANGED);
+    }
+    
+    public static void ProcessCompare(WorkSheet? rWs, List<IGrouping<string, Item>> currentKeyGroups, List<Item> compareResults, List<IGrouping<string, Item>> compareKeyGroups)
+    {
+        List<Item> readOnlyItems = new List<Item>();
+
+        var compareKeyFlatGroups = compareKeyGroups.SelectMany(s => s).ToList();
+        var currentKeyFlatGroups = currentKeyGroups.SelectMany(s => s).ToList();
+
+        foreach (var currentRow in currentKeyFlatGroups)
+        {
+            var exitedValue = compareKeyFlatGroups.FirstOrDefault(a => a.Value.ToString() == currentRow.Value.ToString());
+            var exitedKey = compareKeyFlatGroups.FirstOrDefault(a => a.Key == currentRow.Key);
+
+            if (exitedValue == null)
+            {
+                currentRow.CompareNote += $"New VALUE detected at column '{rWs["E1"].Value}'" + Environment.NewLine;
+                currentRow.CompareStatus = ItemStatus.ADDED_NEW;
+            }
+
+            if (exitedKey == null)
+            {
+                currentRow.CompareNote += $"New KEY detected at column '{rWs["C1"].Value}'" + Environment.NewLine;
+                currentRow.CompareStatus = ItemStatus.ADDED_NEW;
+            }
+        }
+
+        foreach (var compareWithRow in compareKeyFlatGroups)
+        {
+            var exitedValue = currentKeyFlatGroups.FirstOrDefault(a => a.Value.ToString() == compareWithRow.Value.ToString());
+            var exitedKey = currentKeyFlatGroups.FirstOrDefault(a => a.Key == compareWithRow.Key);
+
+            Item temp = new Item
+            {
+                Key = compareWithRow.Key,
+                DuplicatedKeys = compareWithRow.DuplicatedKeys,
+                Value = compareWithRow.Value
+            };
+
+            if (exitedValue == null)
+            {
+                temp.CompareNote += $"VALUE not found in current version (column '{rWs["E1"].Value}')" + Environment.NewLine;
+                temp.CompareStatus = ItemStatus.REMOVED;
+            }
+
+            if (exitedKey == null)
+            {
+                temp.CompareNote += $"KEY not found in current version (column '{rWs["C1"].Value}')" + Environment.NewLine;
+                temp.CompareStatus = ItemStatus.REMOVED;
+            }
+
+            if (!string.IsNullOrWhiteSpace(temp.CompareNote))
+                currentKeyFlatGroups.Add(temp);
+        }
+
+        compareResults.AddRange(currentKeyFlatGroups.Where(w => w.CompareStatus != ItemStatus.NO_CHANGED));
+        currentKeyFlatGroups.RemoveAll(w => w.CompareStatus != ItemStatus.NO_CHANGED);
+
+        currentKeyGroups = currentKeyFlatGroups.GroupBy(w => w.Key).ToList();
     }
 }
