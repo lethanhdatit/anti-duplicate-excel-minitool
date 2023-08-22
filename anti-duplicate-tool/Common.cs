@@ -53,7 +53,7 @@ public static class Common
         return newKey;
     }
 
-    public static void ProcessMetadata(int levelPrefix, string common_fe_prefix, string common_be_prefix, string beKeyword, WorkSheet wsTemp, IEnumerable<IGrouping<object, Cell>> uniqueListValues, List<Item> duplicatedFeKeyGroups, List<Item> duplicatedBeKeyGroups, out List<IGrouping<string, Item>> dupkeyFe, out List<IGrouping<string, Item>> dupkeyBe)
+    public static void ProcessMetadata(bool autoDoublePrefixForDupKey, string addressInCol, int levelPrefix, string common_fe_prefix, string common_be_prefix, string beKeyword, WorkSheet wsTemp, IEnumerable<IGrouping<object, Cell>> uniqueListValues, List<Item> duplicatedFeKeyGroups, List<Item> duplicatedBeKeyGroups, out List<IGrouping<string, Item>> dupkeyFe, out List<IGrouping<string, Item>> dupkeyBe)
     {
         foreach (var item in uniqueListValues)
         {
@@ -61,7 +61,7 @@ public static class Common
             List<string> duplicatedBeKeys = new List<string>();
             foreach (var ii in item)
             {
-                var key = wsTemp[$"B{ii.RowIndex + 1}"].StringValue;
+                var key = wsTemp[$"{addressInCol}{ii.RowIndex + 1}"].StringValue;
 
                 if (!string.IsNullOrWhiteSpace(key))
                 {
@@ -88,12 +88,43 @@ public static class Common
         }
 
         dupkeyFe = duplicatedFeKeyGroups.GroupBy(g => g.Key).Where(a => a.Count() > 1).ToList();
+
         foreach (var group in dupkeyFe)
+        {
             duplicatedFeKeyGroups.RemoveAll(s => s.Key == group.Key);
+            if (autoDoublePrefixForDupKey)
+            {
+                foreach (var item in group)
+                {
+                    var temp = item.DuplicatedKeys.Select(d =>
+                    {
+                        if (d.StartsWith(common_fe_prefix))
+                            d = $"{common_fe_prefix}.{d}";
+                        return d;
+                    }).ToList();
+                    item.DuplicatedKeys = temp;
+                }
+            }           
+        }
 
         dupkeyBe = duplicatedBeKeyGroups.GroupBy(g => g.Key).Where(a => a.Count() > 1).ToList();
         foreach (var group in dupkeyBe)
+        {
             duplicatedBeKeyGroups.RemoveAll(s => s.Key == group.Key);
+            if (autoDoublePrefixForDupKey)
+            {
+                foreach (var item in group)
+                {
+                    var temp = item.DuplicatedKeys.Select(d =>
+                    {
+                        if (d.StartsWith(common_be_prefix))
+                            d = $"{common_be_prefix}.{d}";
+                        return d;
+                    }).ToList();
+                    item.DuplicatedKeys = temp;
+                }
+            }
+        }
     }
 
 
@@ -230,5 +261,33 @@ public static class Common
         currentKeyFlatGroups.RemoveAll(w => w.CompareStatus != ItemStatus.NO_CHANGED);
 
         currentKeyGroups = currentKeyFlatGroups.GroupBy(w => w.Key).ToList();
+    }
+
+    public static string ColumnIndexToColumnLetter(int colIndex)
+    {
+        int div = colIndex;
+        string colLetter = String.Empty;
+        int mod = 0;
+
+        while (div > 0)
+        {
+            mod = (div - 1) % 26;
+            colLetter = (char)(65 + mod) + colLetter;
+            div = (int)((div - mod) / 26);
+        }
+        return colLetter;
+    }
+
+    public static int ColumnLetterToColumnIndex(string columnLetter)
+    {
+        columnLetter = columnLetter.ToUpper();
+        int sum = 0;
+
+        for (int i = 0; i < columnLetter.Length; i++)
+        {
+            sum *= 26;
+            sum += (columnLetter[i] - 'A' + 1);
+        }
+        return sum;
     }
 }

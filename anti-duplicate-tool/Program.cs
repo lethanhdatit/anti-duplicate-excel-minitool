@@ -3,26 +3,28 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Data;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 bool excelProcess = true;
 bool jsonProcess = true;
 bool autoSizeRow = true;
 bool autoSizeColumn = true;
 int levelPrefix = 1;
+bool autoDoublePrefixForDupKey = false;
 
-string version = "v3";
-string compareWithVersion = "";
+string version = "v1";
+string compareWithFileName = "en_flat";
 
 string path = "C:\\Users\\Admin\\Desktop\\duplicate\\";
-string prefixFileName = "en_flat";
+string prefixFileName = "7.0_en";
 
 string i_excelPath = $"{path}{prefixFileName}_{version}.xlsx";
-string i_jsonPath = $"{path}{prefixFileName}_{version}.json";
+//string i_jsonPath = $"{path}{prefixFileName}_{version}.json";
 
 string o_excelPath = $"{path}{prefixFileName}_unique_{version}.xlsx";
 string o_jsonPath = $"{path}{prefixFileName}_unique_{version}.json";
 
-string c_excelPath = $"{path}{prefixFileName}_{compareWithVersion}.xlsx";
+string c_excelPath = $"{path}{compareWithFileName}.xlsx";
 
 string dup_jsonPath = $"{path}{prefixFileName}_dup_{version}.json";
 string t_excelPath = $"{path}__temp__.xlsx";
@@ -38,7 +40,7 @@ Console.WriteLine("Started");
 Stopwatch stopwatch = new Stopwatch();
 stopwatch.Start();
 
-bool processCompare = !string.IsNullOrWhiteSpace(compareWithVersion);
+bool processCompare = !string.IsNullOrWhiteSpace(compareWithFileName);
 
 var wb_original = WorkBook.Load(i_excelPath);
 if(wb_original != null)
@@ -53,8 +55,9 @@ if(wb_original != null)
 
     var wsTemp = wbTemp.GetWorkSheet("en") ?? wbTemp.DefaultWorkSheet;
 
-    int colValueIndex = 2; // en   
-    string checkDupTargetColumn = wsTemp.Columns[colValueIndex].Rows[0].Value.ToString();
+    int colValueIndex = 1; // en    
+    string checkDupTargetColumn = wsTemp.Columns[colValueIndex].Rows[0].StringValue;
+    var addressInCol = Regex.Replace(wsTemp.Columns[colValueIndex - 1].Rows[0].RangeAddressAsString, @"\d" , string.Empty);
 
     // keep current char case
     var originalTargetCol = wsTemp.Columns[colValueIndex]
@@ -73,7 +76,7 @@ if(wb_original != null)
         rWb.DefaultWorkSheet.Name = wsTemp.Name;
         rWs = rWb.DefaultWorkSheet;
 
-        rWs["A1"].Value = "compare_status" + (processCompare ? $" (with {compareWithVersion})" : string.Empty);
+        rWs["A1"].Value = "compare_status" + (processCompare ? $" (with {compareWithFileName})" : string.Empty);
         rWs["A1"].Style.Font.Bold = true;
 
         rWs["B1"].Value = "compare_logs";
@@ -91,11 +94,13 @@ if(wb_original != null)
 
     int i = 2;
     List<Item> duplicatedFeKeyGroups = new List<Item>();
-    List<Item> duplicatedBeKeyGroups = new List<Item>();
+    List<Item> duplicatedBeKeyGroups = new List<Item>();    
     List<Item> compareResults = new List<Item>();
+    List<Item> compareDupResults = new List<Item>();
+
     List<IGrouping<string, Item>> dupkeyFe, dupkeyBe;
 
-    Common.ProcessMetadata(levelPrefix, common_fe_prefix, common_be_prefix, beKeyword, wsTemp, uniqueListValues, duplicatedFeKeyGroups, duplicatedBeKeyGroups, out dupkeyFe, out dupkeyBe);
+    Common.ProcessMetadata(autoDoublePrefixForDupKey, addressInCol, levelPrefix, common_fe_prefix, common_be_prefix, beKeyword, wsTemp, uniqueListValues, duplicatedFeKeyGroups, duplicatedBeKeyGroups, out dupkeyFe, out dupkeyBe);
 
     if (excelProcess)
     {
@@ -114,28 +119,37 @@ if(wb_original != null)
                 List<Item> compareBeKeyGroups = new List<Item>();
                 List<IGrouping<string, Item>> compareDupkeyFe, compareDupkeyBe;
 
-                var compareUniqueListValues = cWs.Columns[colValueIndex]
+                var targetCompareValueCol = cWs.Columns.FirstOrDefault(f => f.Rows[0].StringValue == checkDupTargetColumn);
+                
+                var compareUniqueListValues = targetCompareValueCol
                                                  .Where(s => s.RowIndex != 0) // not count header row
                                                  .GroupBy(g => g.Value.ToString());
 
-                Common.ProcessMetadata(levelPrefix, common_fe_prefix, common_be_prefix, beKeyword, cWs, compareUniqueListValues, compareFeKeyGroups, compareBeKeyGroups, out compareDupkeyFe, out compareDupkeyBe);
+                var rangeAddr = targetCompareValueCol.RangeAddressAsString;
+                if (rangeAddr.Contains(":"))
+                {
+                    rangeAddr = Regex.Replace(rangeAddr.Split(':')[0], @"\d", string.Empty);                   
+                }
+                var compareAddressInCol = Common.ColumnIndexToColumnLetter(Common.ColumnLetterToColumnIndex(rangeAddr) - 1);
+
+                Common.ProcessMetadata(autoDoublePrefixForDupKey, compareAddressInCol, levelPrefix, common_fe_prefix, common_be_prefix, beKeyword, cWs, compareUniqueListValues, compareFeKeyGroups, compareBeKeyGroups, out compareDupkeyFe, out compareDupkeyBe);
 
                 Common.ProcessCompare(rWs, duplicatedFeKeyGroups, compareResults, compareFeKeyGroups);
 
-                Common.ProcessCompare(rWs, dupkeyFe, compareResults, compareDupkeyFe);
+                Common.ProcessCompare(rWs, dupkeyFe, compareDupResults, compareDupkeyFe);
 
-                Common.ProcessCompare(rWs, dupkeyBe, compareResults, compareDupkeyBe);
+                Common.ProcessCompare(rWs, dupkeyBe, compareDupResults, compareDupkeyBe);
 
                 Common.ProcessCompare(rWs, duplicatedBeKeyGroups, compareResults, compareBeKeyGroups);
             }
 
-            compareResults = compareResults.OrderBy(o => (o.Key.Contains(".") ? o.Key.Split(".")[o.Key.Split(".").Length - 1] : o.Key))
+            var _compareResults = compareResults.Concat(compareDupResults).OrderBy(o => (o.Key.Contains(".") ? o.Key.Split(".")[o.Key.Split(".").Length - 1] : o.Key))
                                        .ThenBy(t => t.Value)
                                        .ThenBy(t => t.CompareStatus)
                                        .ThenBy(t => t.CompareNote)
                                        .ToList();
 
-            foreach (var cp in compareResults)
+            foreach (var cp in _compareResults)
             {
                 rWs[$"B{i}"].Value = cp.CompareNote;
                 rWs[$"A{i}"].Value = cp.CompareStatus.ToString();
@@ -145,6 +159,7 @@ if(wb_original != null)
 
                 rWs[$"B{i}"].Style.WrapText = true;
                 rWs[$"D{i}"].Style.WrapText = true;
+                rWs[$"E{i}"].Style.WrapText = true;
 
                 if (cp.CompareStatus == ItemStatus.ADDED_NEW)
                 {
@@ -175,7 +190,9 @@ if(wb_original != null)
             rWs[$"D{i}"].Value = string.Join(Environment.NewLine, fe.DuplicatedKeys);
             rWs[$"E{i}"].Value = fe.Value;
 
+            rWs[$"B{i}"].Style.WrapText = true;
             rWs[$"D{i}"].Style.WrapText = true;
+            rWs[$"E{i}"].Style.WrapText = true;
 
             if (autoSizeRow)
                 rWs.AutoSizeRow(i - 1);
@@ -191,7 +208,9 @@ if(wb_original != null)
                     rWs[$"D{i}"].Value = "skipped process because duplicated new key -> accept duplicate value";
                     rWs[$"E{i}"].Value = item.Value.ToString();
 
+                    rWs[$"B{i}"].Style.WrapText = true;
                     rWs[$"D{i}"].Style.WrapText = true;
+                    rWs[$"E{i}"].Style.WrapText = true;
 
                     if (autoSizeRow)
                         rWs.AutoSizeRow(i - 1);
@@ -207,7 +226,9 @@ if(wb_original != null)
                     rWs[$"D{i}"].Value = "skipped process because duplicated new key -> accept duplicate value";
                     rWs[$"E{i}"].Value = item.Value.ToString();
 
+                    rWs[$"B{i}"].Style.WrapText = true;
                     rWs[$"D{i}"].Style.WrapText = true;
+                    rWs[$"E{i}"].Style.WrapText = true;
 
                     if (autoSizeRow)
                         rWs.AutoSizeRow(i - 1);
@@ -221,7 +242,9 @@ if(wb_original != null)
             rWs[$"D{i}"].Value = string.Join(Environment.NewLine, be.DuplicatedKeys);
             rWs[$"E{i}"].Value = be.Value;
 
+            rWs[$"B{i}"].Style.WrapText = true;
             rWs[$"D{i}"].Style.WrapText = true;
+            rWs[$"E{i}"].Style.WrapText = true;
 
             if (autoSizeRow)
                 rWs.AutoSizeRow(i - 1);
@@ -235,6 +258,7 @@ if(wb_original != null)
             rWs.AutoSizeColumn(1);
             rWs.AutoSizeColumn(2);
             rWs.AutoSizeColumn(3);
+            rWs.AutoSizeColumn(4);
         }
 
         if (File.Exists(o_excelPath))
@@ -251,9 +275,13 @@ if(wb_original != null)
         if (duplicatedFeKeyGroups.Any() || duplicatedBeKeyGroups.Any() || compareResults.Any())
         {
             JObject combines = new JObject();
-
+          
             foreach (var gr in compareResults.Where(w => w.CompareStatus != ItemStatus.REMOVED))
                 combines.Add(gr.Key, gr.Value.ToString());
+
+            foreach (var gr in compareDupResults.Where(w => w.CompareStatus != ItemStatus.REMOVED))
+                foreach (var d in gr.DuplicatedKeys)
+                    combines.Add(d, gr.Value.ToString());
 
             foreach (var gr in duplicatedFeKeyGroups)
                 combines.Add(gr.Key, gr.Value.ToString());
@@ -261,22 +289,18 @@ if(wb_original != null)
             foreach (var group in dupkeyFe)
                 foreach (var item in group)
                     foreach (var d in item.DuplicatedKeys)
-                    {
                         if (!combines.ContainsKey(d))
-                        {
                             combines.Add(d, item.Value.ToString());
-                        }
-                    }
+                        else if (combines[d].ToString() != item.Value.ToString())
+                            Console.WriteLine(d + ": " + combines[d].ToString() + " - " + item.Value.ToString());
 
             foreach (var group in dupkeyBe)
                 foreach (var item in group)
                     foreach (var d in item.DuplicatedKeys)
-                    {
                         if (!combines.ContainsKey(d))
-                        {
                             combines.Add(d, item.Value.ToString());
-                        }
-                    }
+                        else if (combines[d].ToString() != item.Value.ToString())
+                            Console.WriteLine(d + ": " + combines[d].ToString() + " - " + item.Value.ToString());
 
             foreach (var gr in duplicatedBeKeyGroups)
                 combines.Add(gr.Key, gr.Value.ToString());
