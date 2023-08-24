@@ -7,8 +7,9 @@ using System.Text.RegularExpressions;
 
 bool excelProcess = true;
 bool jsonProcess = true;
-bool autoSizeRow = true;
-bool autoSizeColumn = true;
+bool jsonMetaProcess = true;
+bool autoSizeRow = false;
+bool autoSizeColumn = false;
 int levelPrefix = 1;
 bool autoDoublePrefixForDupKey = false;
 
@@ -23,6 +24,7 @@ string i_excelPath = $"{path}{prefixFileName}_{version}.xlsx";
 
 string o_excelPath = $"{path}{prefixFileName}_unique_{version}.xlsx";
 string o_jsonPath = $"{path}{prefixFileName}_unique_{version}.json";
+string m_jsonPath = $"{path}{prefixFileName}_meta_{version}.json";
 
 string c_excelPath = $"{path}{compareWithFileName}.xlsx";
 
@@ -275,7 +277,38 @@ if(wb_original != null)
         if (duplicatedFeKeyGroups.Any() || duplicatedBeKeyGroups.Any() || compareResults.Any())
         {
             JObject combines = new JObject();
-          
+
+            if (jsonMetaProcess)
+            {
+                JObject metaResult = new JObject();
+
+                foreach (var gr in duplicatedFeKeyGroups)
+                    foreach (var item in gr.DuplicatedKeys)
+                        metaResult.Add(item, gr.Key);
+
+                foreach (var group in dupkeyFe)
+                    foreach (var item in group)
+                        foreach (var d in item.DuplicatedKeys)
+                            if (!metaResult.ContainsKey(d))
+                                metaResult.Add(d, d);
+                            else if (metaResult[d].ToString() != item.Value.ToString())
+                                Console.WriteLine(d + ": " + metaResult[d].ToString() + " - " + item.Value.ToString());
+
+                foreach (var group in dupkeyBe)
+                    foreach (var item in group)
+                        foreach (var d in item.DuplicatedKeys)
+                            if (!metaResult.ContainsKey(d))
+                                metaResult.Add(d, d);
+                            else if (metaResult[d].ToString() != item.Value.ToString())
+                                Console.WriteLine(d + ": " + metaResult[d].ToString() + " - " + item.Value.ToString());
+
+                foreach (var gr in duplicatedBeKeyGroups)
+                    foreach (var item in gr.DuplicatedKeys)
+                        metaResult.Add(item, gr.Key);
+
+                File.WriteAllText(m_jsonPath, JsonConvert.SerializeObject(metaResult, Formatting.Indented));
+            }
+
             foreach (var gr in compareResults.Where(w => w.CompareStatus != ItemStatus.REMOVED))
                 combines.Add(gr.Key, gr.Value.ToString());
 
